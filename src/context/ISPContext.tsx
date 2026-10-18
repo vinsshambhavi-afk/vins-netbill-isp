@@ -162,7 +162,7 @@ export const ISPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       console.error(e);
     }
-    // Default to the first demo operator (Rajesh Kumar Admin)
+    // Default to the first demo operator (VINSADMIN Admin)
     return DEMO_OPERATORS[0];
   });
 
