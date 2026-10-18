@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "Customer": {
+      "title": "Customer",
+      "description": "Broadband and ISP subscriber account record",
+      "type": "object",
+      "properties": {
+        "subscriberId": { "type": "string", "description": "Unique subscriber identifier" },
+        "activationNumber": { "type": "string", "description": "CAF or ONT serial activation number" },
+        "name": { "type": "string", "description": "Full name of subscriber" },
+        "phone": { "type": "string", "description": "Mobile phone number" },
+        "email": { "type": "string", "description": "Email address" },
+        "address": { "type": "string", "description": "Physical installation address" },
+        "area": { "type": "string", "description": "Assigned geographical sector or area" },
+        "planName": { "type": "string", "description": "Active broadband plan" },
+        "speedMbps": { "type": "number", "description": "Plan speed in Mbps" },
+        "monthlyFee": { "type": "number", "description": "Monthly tariff fee" },
+        "billingDay": { "type": "number", "description": "Day of the month for bill generation" },
+        "expiryDate": { "type": "string", "description": "Plan validity end date YYYY-MM-DD" },
+        "status": { "type": "string", "description": "Subscription status: active, due_soon, due_today, overdue, suspended" },
+        "balance": { "type": "number", "description": "Account balance (negative = due, positive = credit)" },
+        "ipAddress": { "type": "string", "description": "Static or DHCP IP allocation" },
+        "connectionType": { "type": "string", "description": "FTTH, Fiber, Wireless, or Cable" },
+        "lastPaymentDate": { "type": "string", "description": "ISO timestamp of most recent receipt" },
+        "lastPaymentAmount": { "type": "number", "description": "Most recent amount paid" },
+        "lastReceiptNo": { "type": "string", "description": "Most recent receipt sequence number" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["subscriberId", "name", "phone", "planName", "monthlyFee"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Cash or digital collection receipt record",
+      "type": "object",
+      "properties": {
+        "receiptNo": { "type": "string", "description": "Consecutive official receipt number" },
+        "customerId": { "type": "string", "description": "Associated subscriber customer ID" },
+        "amount": { "type": "number", "description": "Collected amount in currency" },
+        "method": { "type": "string", "description": "Payment mode: Cash, UPI, or Bank Transfer" },
+        "date": { "type": "string", "description": "ISO timestamp of transaction" },
+        "validFrom": { "type": "string", "description": "Subscription coverage start date" },
+        "validTo": { "type": "string", "description": "Subscription coverage end date" },
+        "collectedBy": { "type": "string", "description": "Name of authorized cashier or field agent" },
+        "notes": { "type": "string", "description": "Optional cashier notes" },
+        "whatsAppReceiptSent": { "type": "boolean", "description": "Whether receipt was dispatched via WhatsApp" }
+      },
+      "required": ["receiptNo", "customerId", "amount", "method", "date", "collectedBy"]
+    },
+    "Operator": {
+      "title": "Operator",
+      "description": "Cash collector or system operator record",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Staff member or collector name" },
+        "phone": { "type": "string", "description": "10-digit login mobile number" },
+        "role": { "type": "string", "description": "admin, cashier, collector, or field_agent" },
+        "assignedArea": { "type": "string", "description": "Assigned neighborhood / zone" },
+        "dailyTarget": { "type": "number", "description": "Daily collection target amount" },
+        "agency": { "type": "string", "description": "Field agency or desk title" },
+        "status": { "type": "string", "description": "active or inactive" },
+        "pin": { "type": "string", "description": "Numeric PIN" }
+      },
+      "required": ["name", "phone", "role"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "ISP business branding, contact, and WhatsApp reminder templates",
+      "type": "object",
+      "properties": {
+        "ispName": { "type": "string", "description": "ISP company name" },
+        "tagline": { "type": "string", "description": "Network tagline" },
+        "phone": { "type": "string", "description": "Primary business phone" },
+        "supportPhone": { "type": "string", "description": "24x7 support helpline" },
+        "email": { "type": "string", "description": "Official support email" },
+        "address": { "type": "string", "description": "Physical headquarters address" },
+        "gstOrTaxNo": { "type": "string", "description": "GSTIN or tax number" },
+        "currencySymbol": { "type": "string", "description": "Currency symbol" },
+        "upiId": { "type": "string", "description": "Business UPI ID for customer QR code payments" },
+        "receiptFooter": { "type": "string", "description": "Footer line on printed receipts" }
+      },
+      "required": ["ispName", "phone"]
+    }
+  },
+  "firestore": {
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Collection of all ISP broadband customer accounts"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Ledger of all collected cash and digital receipts"
+    },
+    "/operators/{operatorId}": {
+      "schema": "Operator",
+      "description": "Authorized cash collectors and administrator accounts"
+    },
+    "/settings/{settingId}": {
+      "schema": "Settings",
+      "description": "ISP operational configurations and branding profile"
+    }
+  }
+}

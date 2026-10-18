@@ -1,0 +1,6 @@
+{
+  "name": "NetBill ISP - Cash Receipts & Monthly Reminders",
+  "description": "Broadband and ISP billing management system with instant WhatsApp cash received receipts, automated monthly payment reminders, subscriber ledger, and collection register.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
