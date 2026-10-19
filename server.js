@@ -79,11 +79,10 @@ app.post('/api/auth/send-otp', async (req, res) => {
     await OTPModel.create({ mobile: cleanMobile, otp });
 
     const apiKey = 'txb_4iSwwT7OdkmJjL30zspttKp1e8riGa1j';
-    const deviceId = '6ad48e375291871e57d17fb2';
+    const deviceId = '6ad4dff65291071e5721b8b2'; // Updated with correct Device ID from app
 
     const messageText = 'Your VinsNetBill ISP verification code is ' + otp + '. Valid for 10 minutes. Do not share this OTP with anyone. - Telecom DLT: VINSBL';
 
-    // Using explicit string concatenation to completely avoid template literal/dollar-sign escaping bugs on Render
     const textbeeUrl = 'https://api.textbee.dev/api/v1/gateway/devices/' + deviceId + '/send-sms';
 
     const textbeeResponse = await fetch(textbeeUrl, {
