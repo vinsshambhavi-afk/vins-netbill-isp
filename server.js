@@ -141,9 +141,9 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
     if (!user) {
       user = await UserModel.create({
-        name: 'Vins Admin',
+        name: cleanMobile === '8147422496' ? 'VINSADMIN (Administrator)' : 'Vins Admin',
         mobile: cleanMobile,
-        role: 'Admin Master'
+        role: cleanMobile === '8147422496' ? 'Admin Master' : 'Cash Collector'
       });
     }
 
