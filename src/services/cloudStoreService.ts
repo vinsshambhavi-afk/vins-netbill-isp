@@ -9,6 +9,9 @@ import {
 import { db } from '../lib/firebase';
 import { Customer, PaymentRecord, OperatorUser, ISPSettings } from '../types/isp';
 
+// Live Render backend URL for cross-origin API requests
+const API_BASE_URL = 'https://vinsnetbill-isp.onrender.com';
+
 export interface CloudSyncStatus {
   isConfigured: boolean;
   isConnected: boolean;
@@ -150,10 +153,10 @@ export const CloudStoreService = {
     }
   },
 
-  // Direct MongoDB Atlas API sync methods via backend proxy
+  // Direct MongoDB Atlas API sync methods via Render backend proxy
   async checkMongoHealth(): Promise<{ success: boolean; database?: string; connected: boolean; counts?: any; error?: string }> {
     try {
-      const res = await fetch('/api/mongodb/health');
+      const res = await fetch(`${API_BASE_URL}/health`);
       return await res.json();
     } catch (e: any) {
       return { success: false, connected: false, error: e?.message || 'MongoDB API unavailable' };
@@ -167,7 +170,7 @@ export const CloudStoreService = {
     settings: ISPSettings
   ): Promise<{ success: boolean; message: string }> {
     try {
-      const res = await fetch('/api/mongodb/push', {
+      const res = await fetch(`${API_BASE_URL}/api/mongodb/push`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customers, payments, operators, settings })
@@ -187,7 +190,7 @@ export const CloudStoreService = {
     message: string;
   }> {
     try {
-      const res = await fetch('/api/mongodb/pull');
+      const res = await fetch(`${API_BASE_URL}/api/mongodb/pull`);
       return await res.json();
     } catch (e: any) {
       return { success: false, message: e?.message || 'Failed to pull from MongoDB proxy' };
