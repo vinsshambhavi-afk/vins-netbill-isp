@@ -68,7 +68,7 @@ const SettingSchema = new mongoose.Schema({ id: String }, { strict: false });
 const SettingModel = mongoose.models.Setting || mongoose.model('Setting', SettingSchema, 'settings');
 
 
-// OTP route with Textbee SMS integration ( using default active device )
+// OTP route with Textbee SMS integration
 app.post('/api/auth/send-otp', async (req, res) => {
   const { mobile } = req.body;
 
@@ -88,7 +88,8 @@ app.post('/api/auth/send-otp', async (req, res) => {
     await OTPModel.create({ mobile: cleanMobile, otp });
 
     const apiKey = 'txb_4iSwwT7OdkmJjL30zspttKp1e8riGa1j';
-    const textbeeUrl = 'https://api.textbee.dev/api/v1/gateway/devices/send-sms';
+    const deviceId = '6ad4dff65291071e5721b8b2';
+    const textbeeUrl = `https://api.textbee.dev/api/v1/gateway/devices/${deviceId}/send-sms`;
 
     const messageText = 'Your VinsNetBill ISP verification code is ' + otp + '. Valid for 10 minutes. Do not share this OTP with anyone. - Telecom DLT: VINSBL';
 
@@ -204,7 +205,8 @@ app.post('/api/sms/send-receipt', async (req, res) => {
   const formattedPhone = '+91' + cleanMobile;
 
   const apiKey = 'txb_4iSwwT7OdkmJjL30zspttKp1e8riGa1j';
-  const textbeeUrl = 'https://api.textbee.dev/api/v1/gateway/devices/send-sms';
+  const deviceId = '6ad4dff65291071e5721b8b2';
+  const textbeeUrl = `https://api.textbee.dev/api/v1/gateway/devices/${deviceId}/send-sms`;
 
   const messageText = `Dear ${subscriber}, payment of Rs.${amount} received successfully for Receipt #${receiptNo} via ${paymentMethod}. Thank you for choosing VinsNetBill ISP! - VINSBL`;
 
