@@ -1,3 +1,4 @@
+cat << 'EOF' > package.json
 {
   "name": "vinsnetbill-isp",
   "version": "1.0.0",
@@ -22,7 +23,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
-    "@types/cors": "^2.8.19",
+    "@types/cors": "^2.8.5",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
     "@types/react": "^18.3.3",
@@ -34,3 +35,4 @@
     "vite": "^5.3.4"
   }
 }
+EOF
