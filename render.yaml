@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: vinsnetbill-isp
+    env: node
+    plan: free
+    buildCommand: bun install && bun run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        value: mongodb+srv://vinsshambhavi_db_user:tPwkTJMeYnxBCRnW@vinsnetbill.rpipe8n.mongodb.net/cash_db?retryWrites=true&w=majority
+      - key: MONGODB_DBNAME
+        value: cash_db

@@ -1,0 +1,12 @@
+{
+  "projectId": "vinsbill-cash",
+  "appId": "1:540825391116:web:b5b0fd1e67e379ec765e29",
+  "apiKey": "AIzaSyD56cdjtIWmrRZbKQPfUv6Zl-i7Vbodmz8",
+  "authDomain": "vinsbill-cash.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "vinsbill-cash.firebasestorage.app",
+  "messagingSenderId": "540825391116",
+  "measurementId": "G-0QH0S1855X",
+  "oAuthClientId": "",
+  "recaptchaSiteKey": ""
+}
