@@ -654,7 +654,7 @@ export const ISPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Invalid or expired OTP / PIN code. Please enter the correct code.' };
     }
 
-    const chosenName = userName?.trim() || (cleanDigits === '8147422496' ? 'VINSADMIN (Administrator)' : 'Vins Admin');
+    const chosenName = userName?.trim() || (cleanDigits === '918147422496' ? 'VINSADMIN (Administrator)' : 'Vins Admin');
     const userRole = preferredRole || 'admin';
     const user: OperatorUser = {
       id: `op-admin-${cleanDigits}`,
@@ -685,7 +685,7 @@ export const ISPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setAdminProfile = (name: string, phone?: string) => {
     if (!name.trim()) return;
-    const cleanPhone = phone ? phone.replace(/\D/g, '') : currentUser?.phone || '8147422496';
+    const cleanPhone = phone ? phone.replace(/\D/g, '') : currentUser?.phone || '918147422496';
     
     if (currentUser) {
       const updatedUser: OperatorUser = { ...currentUser, name: name.trim(), phone: cleanPhone };
