@@ -17,6 +17,13 @@ export interface SmsDispatchLog {
   error?: string;
 }
 
+type SmsResult = {
+  success: boolean;
+  smsText: string;
+  log: SmsDispatchLog;
+  error?: string;
+};
+
 const STORAGE_KEYS = {
   CONFIG: 'vinsnetbill_sms_config_v1',
   LOGS: 'vinsnetbill_sms_logs_v1',
@@ -25,21 +32,79 @@ const STORAGE_KEYS = {
 const DEFAULT_CONFIG: SmsGatewayConfig = {
   provider: 'telecom_dlt',
   senderId: 'VINSBL',
-  dltTemplateId: '14071688920192831',
-  isLive: true
+  // Configure the correct approved template ID in Settings.
+  dltTemplateId: '',
+  isLive: true,
 };
 
+// Keep this as your deployed backend URL. SMS gateway credentials must live
+// in backend environment variables, never in frontend code.
 const API_BASE_URL = 'https://vinsnetbill-isp.onrender.com';
-const TEXTBEE_URL = 'https://api.textbee.dev/api/v1/gateway/devices/6ad4dff65291071e5721b8b2/send-sms';
-const TEXTBEE_API_KEY = 'txb_4iSwwT7OdkmJjL30zspttKp1e8riGa1j';
+
+function cleanMobile(phone: string): string {
+  return String(phone ?? '').replace(/\D/g, '').slice(-10);
+}
+
+function createLog(
+  phone: string,
+  message: string,
+  status: SmsDispatchLog['status'],
+  carrier: string,
+  extra: Partial<Pick<SmsDispatchLog, 'otp' | 'error'>> = {},
+): SmsDispatchLog {
+  return {
+    id: `sms-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    phone,
+    otp: extra.otp ?? '',
+    message,
+    timestamp: new Date().toISOString(),
+    status,
+    carrier,
+    ...(extra.error ? { error: extra.error } : {}),
+  };
+}
+
+async function postJson(
+  path: string,
+  payload: Record<string, unknown>,
+): Promise<{ response: Response | null; data: any }> {
+  // Try same-origin first (useful if a hosting proxy is configured), then
+  // the Render backend. Do not send an SMS directly from the browser.
+  let response: Response | null = null;
+
+  try {
+    response = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    response = null;
+  }
+
+  if (!response || !response.ok) {
+    try {
+      response = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      response = null;
+    }
+  }
+
+  const data = response ? await response.json().catch(() => null) : null;
+  return { response, data };
+}
 
 export const SmsService = {
   getConfig(): SmsGatewayConfig {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error(e);
+      if (saved) return { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+    } catch (error) {
+      console.error('Could not read SMS configuration:', error);
     }
     return DEFAULT_CONFIG;
   },
@@ -51,286 +116,230 @@ export const SmsService = {
     return updated;
   },
 
-  // Dispatches an SMS verification OTP via Render backend API with Textbee gateway
-  async dispatchSmsOtp(phone: string, otp: string, recipientName: string): Promise<{
-    success: boolean;
-    smsText: string;
-    log: SmsDispatchLog;
-    error?: string;
-  }> {
-    const config = this.getConfig();
-    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
-    const formattedPhone = '+91' + cleanPhone;
-    const smsText = `Your VinsNetBill ISP verification code is ${otp}. Valid for 10 minutes. Do not share this OTP with anyone. - Telecom DLT: ${config.senderId}`;
+  /**
+   * Requests an OTP from the backend.
+   * The backend should generate/store the OTP and send the approved OTP
+   * template. The `otp` parameter is retained for compatibility with
+   * existing callers/logging; it is not used to construct a reminder.
+   */
+  async dispatchSmsOtp(
+    phone: string,
+    otp: string,
+    _recipientName: string,
+  ): Promise<SmsResult> {
+    const mobile = cleanMobile(phone);
+    const smsText = 'OTP request sent through the VINS Bills authentication service.';
 
-    // 1. Try local backend route first, then Render backend
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      let apiRes = await fetch('/api/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile: cleanPhone }),
-        signal: controller.signal
-      }).catch(() => null);
-
-      if (!apiRes || !apiRes.ok) {
-        apiRes = await fetch(`${API_BASE_URL}/api/auth/send-otp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mobile: cleanPhone }),
-          signal: controller.signal
-        }).catch(() => null);
-      }
-      clearTimeout(timeoutId);
-
-      if (apiRes) {
-        const data = await apiRes.json().catch(() => null);
-
-        if (apiRes.ok && data?.success) {
-          const log: SmsDispatchLog = {
-            id: `sms-${Date.now()}`,
-            phone: cleanPhone,
-            otp,
-            message: smsText,
-            timestamp: new Date().toISOString(),
-            status: 'DELIVERED',
-            carrier: 'Textbee DLT Gateway'
-          };
-          this.storeLocalLog(log);
-          return { success: true, smsText, log };
-        }
-
-        // If backend returned explicit error message from Textbee (e.g. limit reached)
-        if (data && !data.success) {
-          const errorMsg = data.message || 'SMS Gateway Error';
-          const log: SmsDispatchLog = {
-            id: `sms-${Date.now()}`,
-            phone: cleanPhone,
-            otp,
-            message: smsText,
-            timestamp: new Date().toISOString(),
-            status: 'FAILED',
-            carrier: 'Textbee Gateway',
-            error: errorMsg
-          };
-          this.storeLocalLog(log);
-          return { success: false, smsText, log, error: errorMsg };
-        }
-      }
-    } catch (apiErr: any) {
-      console.warn('Backend SMS API failed or timed out:', apiErr?.message);
+    if (mobile.length !== 10) {
+      const error = 'Invalid mobile number.';
+      const log = createLog(mobile, smsText, 'FAILED', 'Validation', { otp, error });
+      this.storeLocalLog(log);
+      return { success: false, smsText, log, error };
     }
 
-    // 2. Direct Textbee Gateway attempt if backend proxy failed
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const tbRes = await fetch(TEXTBEE_URL, {
-        method: 'POST',
-        headers: {
-          'x-api-key': TEXTBEE_API_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          recipients: [formattedPhone],
-          message: smsText
-        }),
-        signal: controller.signal
+      const { response, data } = await postJson('/api/auth/send-otp', {
+        mobile,
       });
-      clearTimeout(timeoutId);
 
-      const tbData = await tbRes.json().catch(() => null);
-
-      if (tbRes.ok && !tbData?.hasReachedLimit && !tbData?.error) {
-        const log: SmsDispatchLog = {
-          id: `sms-${Date.now()}`,
-          phone: cleanPhone,
-          otp,
-          message: smsText,
-          timestamp: new Date().toISOString(),
-          status: 'DELIVERED',
-          carrier: 'Textbee Gateway Direct'
-        };
+      if (response?.ok && data?.success) {
+        const log = createLog(
+          mobile,
+          data.message || smsText,
+          'SENT',
+          'VINS Bills OTP Backend',
+          { otp },
+        );
         this.storeLocalLog(log);
-        return { success: true, smsText, log };
-      } else {
-        const failureReason = tbData?.message || (tbData?.hasReachedLimit ? 'TextBee daily quota limit of 50 SMS has been reached for today.' : 'SMS Gateway device is currently unreachable.');
-        const log: SmsDispatchLog = {
-          id: `sms-${Date.now()}`,
-          phone: cleanPhone,
-          otp,
-          message: smsText,
-          timestamp: new Date().toISOString(),
-          status: 'FAILED',
-          carrier: 'Textbee Gateway Direct',
-          error: failureReason
-        };
-        this.storeLocalLog(log);
-        return {
-          success: false,
-          smsText,
-          log,
-          error: failureReason
-        };
+        return { success: true, smsText: log.message, log };
       }
-    } catch (tbErr: any) {
-      const failMsg = tbErr?.name === 'AbortError' ? 'SMS gateway request timed out. Please check network connection.' : (tbErr?.message || 'Failed to reach SMS gateway server.');
-      const log: SmsDispatchLog = {
-        id: `sms-${Date.now()}`,
-        phone: cleanPhone,
-        otp,
-        message: smsText,
-        timestamp: new Date().toISOString(),
-        status: 'FAILED',
-        carrier: 'Gateway Network Error',
-        error: failMsg
-      };
+
+      const error = data?.message || 'OTP request failed. Check the backend and SMS gateway.';
+      const log = createLog(mobile, smsText, 'FAILED', 'VINS Bills OTP Backend', { otp, error });
       this.storeLocalLog(log);
+      return { success: false, smsText, log, error };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'OTP backend is unreachable.';
+      const log = createLog(mobile, smsText, 'FAILED', 'Network Error', { otp, error: message });
+      this.storeLocalLog(log);
+      return { success: false, smsText, log, error: message };
+    }
+  },
+
+  /** Verifies an OTP using the authentication backend. */
+  async verifySmsOtp(
+    phone: string,
+    otp: string,
+    _name?: string,
+    _role?: string,
+  ): Promise<{ success: boolean; error?: string; user?: any }> {
+    const mobile = cleanMobile(phone);
+
+    if (mobile.length !== 10 || !otp.trim()) {
+      return { success: false, error: 'Enter a valid mobile number and OTP.' };
+    }
+
+    try {
+      const { response, data } = await postJson('/api/auth/verify-otp', {
+        mobile,
+        otp: otp.trim(),
+      });
+
+      if (response?.ok && data) return data;
+
       return {
         success: false,
-        smsText,
-        log,
-        error: failMsg
+        error: data?.message || 'Verification failed. Incorrect or expired OTP.',
+      };
+    } catch (error: unknown) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Backend verification server unreachable.',
       };
     }
   },
 
-  // Verifies SMS OTP via local route or Render backend API
-  async verifySmsOtp(phone: string, otp: string, name?: string, role?: string): Promise<{
-    success: boolean;
-    error?: string;
-    user?: any;
-  }> {
-    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
-    try {
-      let apiRes = await fetch('/api/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile: cleanPhone, otp })
-      }).catch(() => null);
-
-      if (!apiRes || !apiRes.ok) {
-        apiRes = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mobile: cleanPhone, otp })
-        }).catch(() => null);
-      }
-
-      if (apiRes && apiRes.ok) {
-        return await apiRes.json();
-      }
-      const data = apiRes ? await apiRes.json().catch(() => null) : null;
-      return { success: false, error: data?.message || 'Verification failed. Incorrect or expired OTP.' };
-    } catch (e: any) {
-      return { success: false, error: e?.message || 'Backend verification server unreachable.' };
-    }
-  },
-
-  // Dispatches an official payment receipt via SMS
+  /** Sends a payment receipt through the backend receipt endpoint. */
   async dispatchReceiptSms(
     phone: string,
     receiptNo: string,
     amount: number,
     validTo: string,
     customerName: string,
-    ispName: string
-  ): Promise<{ success: boolean; smsText: string; log: SmsDispatchLog; error?: string }> {
-    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
-    const smsText = `Dear ${customerName}, payment of Rs.${amount} received successfully for Receipt #${receiptNo} via Cash. Broadband active till ${validTo}. Thank you for choosing ${ispName}! - VINSBL`;
+    ispName: string,
+  ): Promise<SmsResult> {
+    const mobile = cleanMobile(phone);
+    const smsText =
+      `Dear ${customerName}, payment of Rs.${amount} received successfully ` +
+      `for Receipt #${receiptNo} via Cash. Broadband active till ${validTo}. ` +
+      `Thank you for choosing ${ispName}! - VINSBL`;
 
-    // Try local backend API first, then Render API
+    if (mobile.length !== 10) {
+      const error = 'Invalid mobile number.';
+      const log = createLog(mobile, smsText, 'FAILED', 'Validation', { error });
+      this.storeLocalLog(log);
+      return { success: false, smsText, log, error };
+    }
+
     try {
-      let res = await fetch('/api/sms/send-receipt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mobile: cleanPhone,
-          receiptNo,
-          subscriber: customerName,
-          amount,
-          paymentMethod: 'Cash'
-        })
-      }).catch(() => null);
+      const payload = {
+        mobile,
+        receiptNo,
+        subscriber: customerName,
+        amount,
+        paymentMethod: 'Cash',
+        validTo,
+        ispName,
+      };
 
-      if (!res || !res.ok) {
-        res = await fetch(`${API_BASE_URL}/api/sms/send-receipt`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mobile: cleanPhone,
-            receiptNo,
-            subscriber: customerName,
-            amount,
-            paymentMethod: 'Cash'
-          })
-        }).catch(() => null);
-      }
+      const { response, data } = await postJson('/api/sms/send-receipt', payload);
 
-      const data = res ? await res.json().catch(() => null) : null;
-
-      if (res && res.ok && data?.success) {
-        const log: SmsDispatchLog = {
-          id: `sms-${Date.now()}`,
-          phone: cleanPhone,
+      if (response?.ok && data?.success) {
+        const log = createLog(mobile, smsText, 'SENT', 'VINS Bills Receipt Backend', {
           otp: receiptNo,
-          message: smsText,
-          timestamp: new Date().toISOString(),
-          status: 'DELIVERED',
-          carrier: 'Textbee SMS Gateway'
-        };
+        });
         this.storeLocalLog(log);
         return { success: true, smsText, log };
-      } else {
-        const failMsg = data?.message || 'SMS receipt gateway failed to send message.';
-        const log: SmsDispatchLog = {
-          id: `sms-${Date.now()}`,
-          phone: cleanPhone,
-          otp: receiptNo,
-          message: smsText,
-          timestamp: new Date().toISOString(),
-          status: 'FAILED',
-          carrier: 'Textbee Gateway',
-          error: failMsg
-        };
-        this.storeLocalLog(log);
-        return { success: false, smsText, log, error: failMsg };
       }
-    } catch (e: any) {
-      const failMsg = e?.message || 'Failed to connect to SMS dispatch server.';
-      const log: SmsDispatchLog = {
-        id: `sms-${Date.now()}`,
-        phone: cleanPhone,
+
+      const error = data?.message || 'SMS receipt gateway failed to send the message.';
+      const log = createLog(mobile, smsText, 'FAILED', 'VINS Bills Receipt Backend', {
         otp: receiptNo,
-        message: smsText,
-        timestamp: new Date().toISOString(),
-        status: 'FAILED',
-        carrier: 'Gateway Network Error',
-        error: failMsg
-      };
+        error,
+      });
       this.storeLocalLog(log);
-      return { success: false, smsText, log, error: failMsg };
+      return { success: false, smsText, log, error };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Receipt SMS backend is unreachable.';
+      const log = createLog(mobile, smsText, 'FAILED', 'Network Error', {
+        otp: receiptNo,
+        error: message,
+      });
+      this.storeLocalLog(log);
+      return { success: false, smsText, log, error: message };
     }
   },
 
-  storeLocalLog(log: SmsDispatchLog) {
+  /**
+   * Sends an actual renewal/overdue reminder. This deliberately calls a
+   * different backend endpoint from the OTP endpoint.
+   */
+  async dispatchSmsReminder(
+    phone: string,
+    message: string,
+    recipientName: string,
+    reminderType: string,
+  ): Promise<SmsResult> {
+    const mobile = cleanMobile(phone);
+    const smsText = message.trim();
+
+    if (mobile.length !== 10) {
+      const error = 'Invalid subscriber mobile number.';
+      const log = createLog(mobile, smsText, 'FAILED', 'Validation', { error });
+      this.storeLocalLog(log);
+      return { success: false, smsText, log, error };
+    }
+
+    if (!smsText) {
+      const error = 'Reminder message cannot be empty.';
+      const log = createLog(mobile, smsText, 'FAILED', 'Validation', { error });
+      this.storeLocalLog(log);
+      return { success: false, smsText, log, error };
+    }
+
     try {
-      const existingLogs: SmsDispatchLog[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOGS) || '[]');
-      const updatedLogs = [log, ...existingLogs.slice(0, 49)];
-      localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(updatedLogs));
-    } catch (e) {
-      console.error(e);
+      const { response, data } = await postJson('/api/sms/send-reminder', {
+        mobile,
+        message: smsText,
+        subscriber: recipientName,
+        reminderType,
+      });
+
+      if (response?.ok && data?.success) {
+        const log = createLog(
+          mobile,
+          smsText,
+          'SENT',
+          'VINS Bills Reminder Backend',
+        );
+        this.storeLocalLog(log);
+        return { success: true, smsText, log };
+      }
+
+      const error =
+        data?.message ||
+        'Reminder SMS failed. Confirm that /api/sms/send-reminder is implemented on the backend.';
+      const log = createLog(mobile, smsText, 'FAILED', 'VINS Bills Reminder Backend', { error });
+      this.storeLocalLog(log);
+      return { success: false, smsText, log, error };
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Reminder SMS backend is unreachable.';
+      const log = createLog(mobile, smsText, 'FAILED', 'Network Error', { error: message });
+      this.storeLocalLog(log);
+      return { success: false, smsText, log, error: message };
+    }
+  },
+
+  storeLocalLog(log: SmsDispatchLog): void {
+    try {
+      const existing: SmsDispatchLog[] = JSON.parse(
+        localStorage.getItem(STORAGE_KEYS.LOGS) || '[]',
+      );
+      localStorage.setItem(
+        STORAGE_KEYS.LOGS,
+        JSON.stringify([log, ...existing].slice(0, 50)),
+      );
+    } catch (error) {
+      console.error('Could not save SMS log:', error);
     }
   },
 
   getRecentLogs(): SmsDispatchLog[] {
     try {
       return JSON.parse(localStorage.getItem(STORAGE_KEYS.LOGS) || '[]');
-    } catch (e) {
+    } catch {
       return [];
     }
-  }
+  },
 };
