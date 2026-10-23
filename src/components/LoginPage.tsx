@@ -11,7 +11,7 @@ const API_BASE_URL = 'https://vinsnetbill-isp.onrender.com';
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const { loginWithOtp, sendOtpToOperator, operators } = useISP();
-  const [mobile, setMobile] = useState('8147422496');
+  const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [loading, setLoading] = useState(false);
