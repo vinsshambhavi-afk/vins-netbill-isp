@@ -1,4 +1,3 @@
-cat << 'EOF' > package.json
 {
   "name": "vinsnetbill-isp",
   "version": "1.0.0",
@@ -35,4 +34,4 @@ cat << 'EOF' > package.json
     "vite": "^5.3.4"
   }
 }
-EOF
+
