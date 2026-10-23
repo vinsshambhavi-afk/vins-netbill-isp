@@ -68,7 +68,10 @@ const SettingSchema = new mongoose.Schema({ id: String }, { strict: false });
 const SettingModel = mongoose.models.Setting || mongoose.model('Setting', SettingSchema, 'settings');
 
 
-// OTP route with Textbee SMS integration
+// ==========================================
+// AUTHENTICATION & OTP ROUTES
+// ==========================================
+
 app.post('/api/auth/send-otp', async (req, res) => {
   const { mobile } = req.body;
 
@@ -163,7 +166,9 @@ app.post('/api/auth/verify-otp', async (req, res) => {
       });
     }
 
-    await OTPModel.deleteOne({ _id: validOtp._id });
+    if (validOtp) {
+      await OTPModel.deleteOne({ _id: validOtp._id });
+    }
 
     res.json({ success: true, user });
   } catch (error) {
@@ -175,7 +180,10 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 });
 
 
-// Cash record routes
+// ==========================================
+// CASH RECORD ROUTES
+// ==========================================
+
 app.get('/api/cash-records', async (req, res) => {
   try {
     const records = await CashRecord.find().sort({ date: -1 });
@@ -202,9 +210,10 @@ app.post('/api/cash-records', async (req, res) => {
 
 
 // ==========================================
-// AUTOMATED SMS RECEIPT ROUTE (Textbee)
+// AUTOMATED SMS ROUTES (Textbee)
 // ==========================================
 
+// Send Receipt SMS
 app.post('/api/sms/send-receipt', async (req, res) => {
   const { mobile, receiptNo, subscriber, amount, paymentMethod } = req.body;
 
@@ -245,6 +254,50 @@ app.post('/api/sms/send-receipt', async (req, res) => {
   } catch (error) {
     console.error('Error dispatching SMS receipt:', error.message);
     res.status(500).json({ success: false, message: error.message || 'Error sending SMS receipt' });
+  }
+});
+
+// Send Overdue SMS Notice
+app.post('/api/sms/send-overdue', async (req, res) => {
+  const { mobile, subscriber, username, expiryDate, amount, plan } = req.body;
+
+  if (!mobile) {
+    return res.status(400).json({ success: false, message: 'Mobile number required' });
+  }
+
+  const cleanMobile = mobile.replace(/\D/g, '').slice(-10);
+  const formattedPhone = '+91' + cleanMobile;
+
+  const apiKey = 'txb_4iSwwT7OdkmJjL30zspttKp1e8riGa1j';
+  const deviceId = '6ad4dff65291071e5721b8b2';
+  const textbeeUrl = `https://api.textbee.dev/api/v1/gateway/devices/${deviceId}/send-sms`;
+
+  const messageText = `OVERDUE PAYMENT NOTICE*\n*VinsNetBill Broadband*\n━━━━━━━━━━━━━━━━━━━━\nDear *${subscriber || 'Subscriber'}*,\nYour broadband subscription for *${username || 'subscriber'}* is currently *OVERDUE*.\nYour plan expired on *${expiryDate || 'N/A'}*.\n\n⚠️ *Pending Amount:* ₹${amount || '0'}\n📋 *Plan:* ${plan || 'VINS-FTTH'}\n\nGrace period is currently active. Please clear the pending dues immediately to avoid automatic service disconnection.\n\n💳 *Pay UPI:* 8147422496@ybl\n💬 Reply here to schedule immediate cash pickup.\n📞 Urgent Assistance: +91 8147422496\nhttps://vinsenterprises.site.je`;
+
+  try {
+    const textbeeResponse = await fetch(textbeeUrl, {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        recipients: [formattedPhone],
+        message: messageText
+      })
+    });
+
+    const result = await textbeeResponse.json();
+
+    if (!textbeeResponse.ok) {
+      console.error('TextBee Overdue SMS error:', result);
+      return res.status(500).json({ success: false, message: result.message || 'Failed to send Overdue SMS' });
+    }
+
+    res.json({ success: true, message: 'Overdue SMS notice dispatched successfully', result });
+  } catch (error) {
+    console.error('Error dispatching Overdue SMS:', error.message);
+    res.status(500).json({ success: false, message: error.message || 'Error sending Overdue SMS' });
   }
 });
 
@@ -323,7 +376,10 @@ app.get('/api/mongodb/pull', handleMongoPull);
 app.post('/api/mongodb/pull', handleMongoPull);
 
 
-// Server Startup
+// ==========================================
+// SERVER STARTUP
+// ==========================================
+
 async function startServer() {
   const PORT = process.env.PORT || 5000;
 
